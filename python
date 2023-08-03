@@ -1,0 +1,195 @@
+import datetime
+import sqlite3
+import tkinter as tk
+from tkinter import Tk, Label, Text, Button, Entry, messagebox
+
+class Car:
+    def __init__(self, plate_number):
+        self.plate_number = plate_number
+        self.entry_time = None
+
+    def enter_parking_lot(self):
+        self.entry_time = datetime.datetime.now()
+
+    def exit_parking_lot(self):
+        if self.entry_time is None:
+            print(f"Car {self.plate_number} has not entered the parking lot")
+        else:
+            exit_time = datetime.datetime.now()
+            total_time = exit_time - self.entry_time
+            self.entry_time = None
+            return total_time
+
+class ParkingLot:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.available_spots = capacity
+        self.cars = []
+
+    def is_full(self):
+        return self.available_spots == 0
+
+    def park_car(self, car):
+        if self.is_full():
+            print("Parking lot is full")
+            return
+        car.enter_parking_lot()
+        self.available_spots -= 1
+        self.cars.append(car)
+
+    def remove_car(self, car):
+        if car in self.cars:
+            total_time = car.exit_parking_lot()
+            self.available_spots += 1
+            self.cars.remove(car)
+            return total_time
+
+    def calculate_payment(self, total_time):
+        # Calculate payment based on the total time
+        # You can implement your own logic here
+        payment = total_time.seconds * 1  # Example: Charging Rs1 per second
+        return payment
+
+    def get_parking_lot_status(self):
+        status = f"Parking Lot Status - Available spots: {self.available_spots}/{self.capacity}\n"
+        status += f"Date and Time: {datetime.datetime.now()}\n"
+        status += "-------------------------------\n"
+        for car in self.cars:
+            status += f"Car {car.plate_number} - Entry Time: {car.entry_time}\n"
+        status += "-------------------------------\n"
+        return status
+
+class ParkingLotGUI:
+    def __init__(self, parking_lot):
+        self.parking_lot = parking_lot
+
+        self.root = tk.Tk()
+        self.root.title("Car Parking Lot")
+        self.root.geometry("400x500")
+
+        self.label_title = Label(self.root, text="Car Parking Lot", font=("Times new roman", 24, "bold"))
+        self.label_title.pack(pady=10)
+
+        self.frame_login = tk.Frame(self.root, bd=1, relief=tk.SOLID)
+        self.frame_login.pack(pady=10)
+
+        self.label_username = tk.Label(self.frame_login, text="Username:")
+        self.label_username.grid(row=0, column=0, padx=5)
+
+        self.entry_username = tk.Entry(self.frame_login)
+        self.entry_username.grid(row=0, column=1, padx=5)
+
+        self.label_password = tk.Label(self.frame_login, text="Password:")
+        self.label_password.grid(row=1, column=0, padx=5)
+
+        self.entry_password = tk.Entry(self.frame_login, show="*")
+        self.entry_password.grid(row=1, column=1, padx=5)
+
+        self.button_login = tk.Button(self.frame_login, text="Login", command=self.login)
+        self.button_login.grid(row=2, column=0, columnspan=2, pady=10)
+
+        self.frame_status = tk.Frame(self.root, bd=1, relief=tk.SOLID)
+        self.frame_status.pack(pady=10)
+
+        self.label_status = tk.Label(self.frame_status, text="Parking Lot Status", font=("Arial", 14, "bold"))
+        self.label_status.pack(pady=5)
+
+        self.text_status = tk.Text(self.frame_status, height=10, width=35)
+        self.text_status.pack()
+
+        self.frame_actions = tk.Frame(self.root, bd=1, relief=tk.SOLID)
+        self.frame_actions.pack(pady=10)
+
+        self.label_plate = tk.Label(self.frame_actions, text="Car Plate Number:")
+        self.label_plate.grid(row=0, column=0, padx=5)
+
+        self.entry_plate = tk.Entry(self.frame_actions)
+        self.entry_plate.grid(row=0, column=1, padx=5)
+
+        self.button_park = tk.Button(self.frame_actions, text="Park Car", command=self.park_car, state=tk.DISABLED)
+        self.button_park.grid(row=1, column=0, pady=10)
+
+        self.button_remove = tk.Button(self.frame_actions, text="Remove Car", command=self.remove_car, state=tk.DISABLED)
+        self.button_remove.grid(row=1, column=1, pady=10)
+
+        self.button_refresh = tk.Button(self.root, text="Refresh", command=self.refresh_status, state=tk.DISABLED)
+        self.button_refresh.pack(pady=10)
+
+        self.button_exit = tk.Button(self.root, text="Exit", command=self.exit_program)
+        self.button_exit.pack(pady=10)
+
+        # Connect to the database
+        self.connection = sqlite3.connect("parking_lot.db")
+        self.cursor = self.connection.cursor()
+
+        # Create the car table if it doesn't exist
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS cars (plate_number TEXT, entry_time TEXT)")
+
+    def login(self):
+        username = self.entry_username.get()
+        password = self.entry_password.get()
+        
+        # Add your own logic for username and password verification
+        if username == "admin" and password == "password":
+            self.button_park.config(state=tk.NORMAL)
+            self.button_remove.config(state=tk.NORMAL)
+            self.button_refresh.config(state=tk.NORMAL)
+            self.entry_username.config(state=tk.DISABLED)
+            self.entry_password.config(state=tk.DISABLED)
+            self.button_login.config(text="Logged in", state=tk.DISABLED)
+        else:
+            messagebox.showerror("Login Failed", "Invalid username or password")
+
+    def park_car(self):
+        plate_number = self.entry_plate.get()
+        car = Car(plate_number)
+        self.parking_lot.park_car(car)
+        self.entry_plate.delete(0, tk.END)
+        self.refresh_status()
+
+        # Insert the car into the database
+        self.cursor.execute("INSERT INTO cars (plate_number, entry_time) VALUES (?, ?)", (car.plate_number, car.entry_time))
+        self.connection.commit()
+
+    def remove_car(self):
+        plate_number = self.entry_plate.get()
+        car = None
+        for parked_car in self.parking_lot.cars:
+            if parked_car.plate_number == plate_number:
+                car = parked_car
+                break
+        if car:
+            total_time = self.parking_lot.remove_car(car)
+            self.entry_plate.delete(0, tk.END)
+            if total_time:
+                payment = self.parking_lot.calculate_payment(total_time)
+                messagebox.showinfo("Total Parking Time and Payment", f"Car {car.plate_number} has been parked for {total_time}.\nPayment: Rs{payment:.2f}")
+            else:
+                messagebox.showinfo("Total Parking Time", f"Car {car.plate_number} has not entered the parking lot.")
+        self.refresh_status()
+
+        # Delete the car from the database
+        self.cursor.execute("DELETE FROM cars WHERE plate_number=?", (car.plate_number,))
+        self.connection.commit()
+
+    def refresh_status(self):
+        status = self.parking_lot.get_parking_lot_status()
+        self.text_status.delete("1.0", tk.END)
+        self.text_status.insert(tk.END, status)
+
+    def exit_program(self):
+        self.connection.close()
+        self.root.destroy()
+
+    def run(self):
+        self.root.mainloop()
+
+# Main program
+def main():
+    capacity = 5
+    parking_lot = ParkingLot(capacity)
+    gui = ParkingLotGUI(parking_lot)
+    gui.run()
+
+if __name__ == "__main__":
+    main()
